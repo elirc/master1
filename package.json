@@ -1,0 +1,24 @@
+{
+  "name": "globalwork-eor-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css,prisma,yml,yaml}\"",
+    "db:generate": "corepack pnpm --filter @globalwork/database db:generate",
+    "db:validate": "node scripts/validate-prisma.mjs",
+    "db:migrate": "corepack pnpm --filter @globalwork/database db:migrate",
+    "db:seed": "corepack pnpm --filter @globalwork/database db:seed"
+  },
+  "devDependencies": {
+    "pnpm": "^10.33.2",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,847 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationStatus {
+  PENDING_REVIEW
+  APPROVED
+  SUSPENDED
+}
+
+enum OrganizationMemberRole {
+  CLIENT_OWNER
+  CLIENT_HR_ADMIN
+  CLIENT_FINANCE
+  CLIENT_MANAGER
+  WORKER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum PlatformRole {
+  PLATFORM_ADMIN
+  ONBOARDING_SPECIALIST
+  PAYROLL_SPECIALIST
+  COMPLIANCE_REVIEWER
+  FINANCE_OPS
+  SUPPORT_AGENT
+}
+
+enum HireRequestStatus {
+  DRAFT
+  SUBMITTED
+  INTERNAL_REVIEW
+  NEEDS_CLIENT_CHANGES
+  READY_FOR_WORKER
+  WORKER_ONBOARDING
+  CONTRACT_PENDING
+  READY_TO_START
+  ACTIVE
+  CANCELLED
+}
+
+enum WorkerStatus {
+  INVITED
+  ONBOARDING
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum EmploymentStatus {
+  PREBOARDING
+  ACTIVE
+  ON_LEAVE
+  TERMINATING
+  TERMINATED
+}
+
+enum DocumentStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+  ARCHIVED
+}
+
+enum PayrollCycleStatus {
+  OPEN
+  COLLECTING_INPUTS
+  INTERNAL_REVIEW
+  CLIENT_REVIEW
+  APPROVED
+  LOCKED
+  PROCESSED
+  CLOSED
+}
+
+enum PayrollItemType {
+  BASE_PAY
+  EMPLOYER_COST
+  EXPENSE_REIMBURSEMENT
+  BONUS
+  DEDUCTION
+}
+
+enum PayrollAdjustmentStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum PayrollAdjustmentKind {
+  BONUS
+  COMMISSION
+  ALLOWANCE
+  DEDUCTION
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOIDED
+}
+
+enum TimeOffType {
+  VACATION
+  SICK
+  PUBLIC_HOLIDAY
+  UNPAID
+  PARENTAL
+}
+
+enum TimeOffStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ExpenseCategory {
+  TRAVEL
+  MEALS
+  EQUIPMENT
+  INTERNET
+  OTHER
+}
+
+enum ExpenseStatus {
+  SUBMITTED
+  REJECTED
+  APPROVED_FOR_PAYROLL
+  REIMBURSED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+enum WorkerProfileEditRequestStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum EmploymentContractStatus {
+  GENERATED
+  SENT
+  SIGNED
+  VOIDED
+}
+
+enum ComplianceRuleSeverity {
+  INFO
+  WARNING
+  BLOCKING
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String
+  passwordHash        String?
+  platformRole        PlatformRole?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  memberships         OrganizationMember[]
+  auditLogs           AuditLog[]           @relation("AuditActor")
+  assignedHireReviews HireRequest[]        @relation("HireReviewer")
+  documentReviews     DocumentReview[]
+  internalNotes        InternalNote[]
+  notifications        Notification[]
+  invitationsSent      Invitation[]         @relation("InvitationInviter")
+  notificationPreferences NotificationPreference[]
+  profileEditRequests WorkerProfileEditRequest[] @relation("ProfileEditRequester")
+  profileEditReviews  WorkerProfileEditRequest[] @relation("ProfileEditReviewer")
+  impersonationStarts  ImpersonationSession[] @relation("ImpersonationActor")
+  impersonationTargets ImpersonationSession[] @relation("ImpersonationTarget")
+  approvalDecisions    ApprovalStep[]
+  assignedTasks        Task[]                @relation("TaskAssignee")
+}
+
+model Organization {
+  id             String               @id @default(cuid())
+  legalName      String
+  tradeName      String?
+  billingEmail   String
+  billingCurrency String              @default("USD")
+  countryCode    String
+  status         OrganizationStatus   @default(PENDING_REVIEW)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  members        OrganizationMember[]
+  invitations    Invitation[]
+  hireRequests   HireRequest[]
+  workers        Worker[]
+  employments    EmploymentRecord[]
+  payrollCycles  PayrollCycle[]
+  invoices       Invoice[]
+  timeOffRequests TimeOffRequest[]
+  expenses       Expense[]
+  payrollAdjustments PayrollAdjustment[]
+  auditLogs      AuditLog[]
+  internalNotes  InternalNote[]
+  featureFlags   FeatureFlag[]
+  billingAccount BillingAccount?
+  complianceRules ComplianceRule[]
+  employmentContracts EmploymentContract[]
+  approvalWorkflows ApprovalWorkflow[]
+  approvalSteps  ApprovalStep[]
+  tasks          Task[]
+  domainEvents   DomainEvent[]
+}
+
+model Invitation {
+  id             String                 @id @default(cuid())
+  organizationId String
+  email          String
+  role           OrganizationMemberRole
+  token          String                 @unique
+  status         InvitationStatus       @default(PENDING)
+  invitedById    String?
+  acceptedAt     DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  invitedBy      User?                  @relation("InvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([organizationId, status])
+  @@index([email])
+}
+
+model OrganizationMember {
+  id             String                 @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationMemberRole
+  createdAt      DateTime               @default(now())
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  user           User                   @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model CountryProfile {
+  id                      String   @id @default(cuid())
+  countryCode             String   @unique
+  countryName             String
+  defaultCurrency         String
+  payrollFrequency        String
+  standardWorkWeekHours   Decimal
+  annualPtoDays           Int
+  employerCostRateBps     Int
+  requiredWorkerDocuments Json
+  requiredContractFields  Json
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model HireRequest {
+  id                    String            @id @default(cuid())
+  organizationId        String
+  workerId              String?           @unique
+  assignedReviewerId    String?
+  status                HireRequestStatus @default(DRAFT)
+  workerLegalName       String
+  workerEmail           String
+  countryCode           String
+  jobTitle              String
+  department            String?
+  managerName           String?
+  startDate             DateTime
+  salaryAmountMinor     Int
+  salaryCurrency        String
+  workLocation          String
+  employmentType        String            @default("FULL_TIME")
+  submittedAt           DateTime?
+  approvedAt            DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  organization          Organization      @relation(fields: [organizationId], references: [id])
+  worker                Worker?
+  assignedReviewer      User?             @relation("HireReviewer", fields: [assignedReviewerId], references: [id])
+  internalNotes         InternalNote[]
+
+  @@index([organizationId, status])
+  @@index([countryCode])
+}
+
+model Worker {
+  id              String             @id @default(cuid())
+  organizationId  String
+  hireRequestId   String             @unique
+  userId          String?
+  legalName       String
+  email           String
+  countryCode     String
+  status          WorkerStatus       @default(INVITED)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  hireRequest     HireRequest        @relation(fields: [hireRequestId], references: [id])
+  profile         WorkerProfile?
+  documents       Document[]
+  employment      EmploymentRecord?
+  payrollItems    PayrollItem[]
+  timeOffRequests TimeOffRequest[]
+  timeOffBalances TimeOffBalance[]
+  expenses        Expense[]
+  payrollAdjustments PayrollAdjustment[]
+  profileEditRequests WorkerProfileEditRequest[]
+  employmentContracts EmploymentContract[]
+  internalNotes   InternalNote[]
+}
+
+model WorkerProfile {
+  id             String   @id @default(cuid())
+  workerId       String   @unique
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  region         String?
+  postalCode     String?
+  taxIdentifier  String?
+  bankLastFour   String?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  worker         Worker   @relation(fields: [workerId], references: [id])
+}
+
+model WorkerProfileEditRequest {
+  id              String                         @id @default(cuid())
+  workerId        String
+  requestedById   String?
+  reviewedById    String?
+  status          WorkerProfileEditRequestStatus @default(SUBMITTED)
+  proposedChanges Json
+  decisionReason  String?
+  reviewedAt      DateTime?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  worker          Worker                         @relation(fields: [workerId], references: [id])
+  requestedBy     User?                          @relation("ProfileEditRequester", fields: [requestedById], references: [id])
+  reviewedBy      User?                          @relation("ProfileEditReviewer", fields: [reviewedById], references: [id])
+
+  @@index([workerId, status])
+}
+
+model Document {
+  id             String           @id @default(cuid())
+  workerId       String
+  type           String
+  title          String
+  fileName       String?
+  contentType    String?
+  sizeBytes      Int?
+  checksumSha256 String?
+  storageKey     String
+  status         DocumentStatus   @default(PENDING_REVIEW)
+  expiresAt      DateTime?
+  uploadedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  worker         Worker           @relation(fields: [workerId], references: [id])
+  reviews        DocumentReview[]
+
+  @@index([workerId, type])
+  @@index([status])
+}
+
+model DocumentReview {
+  id            String         @id @default(cuid())
+  documentId    String
+  reviewerId    String
+  status        DocumentStatus
+  reason        String?
+  createdAt     DateTime       @default(now())
+  document      Document       @relation(fields: [documentId], references: [id])
+  reviewer      User           @relation(fields: [reviewerId], references: [id])
+}
+
+model EmploymentRecord {
+  id                   String           @id @default(cuid())
+  organizationId        String
+  workerId              String           @unique
+  countryCode           String
+  jobTitle              String
+  department            String?
+  managerName           String?
+  status                EmploymentStatus @default(PREBOARDING)
+  salaryAmountMinor     Int
+  salaryCurrency        String
+  employerCostRateBps   Int
+  startDate             DateTime
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  organization          Organization     @relation(fields: [organizationId], references: [id])
+  worker                Worker           @relation(fields: [workerId], references: [id])
+  payrollItems          PayrollItem[]
+  employmentContracts   EmploymentContract[]
+}
+
+model EmploymentContract {
+  id                  String                   @id @default(cuid())
+  organizationId      String
+  workerId            String
+  employmentRecordId  String?
+  contractNumber      String                   @unique
+  status              EmploymentContractStatus @default(GENERATED)
+  storageKey          String
+  html                String
+  generatedAt         DateTime                 @default(now())
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  organization        Organization             @relation(fields: [organizationId], references: [id])
+  worker              Worker                   @relation(fields: [workerId], references: [id])
+  employmentRecord    EmploymentRecord?        @relation(fields: [employmentRecordId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([workerId])
+}
+
+model PayrollCycle {
+  id             String             @id @default(cuid())
+  organizationId String
+  countryCode    String
+  periodStart    DateTime
+  periodEnd      DateTime
+  status         PayrollCycleStatus @default(OPEN)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  items          PayrollItem[]
+  invoice        Invoice?
+  expenses       Expense[]
+  adjustments    PayrollAdjustment[]
+
+  @@unique([organizationId, countryCode, periodStart, periodEnd])
+  @@index([organizationId, status])
+}
+
+model PayrollItem {
+  id                   String          @id @default(cuid())
+  payrollCycleId        String
+  workerId              String
+  employmentRecordId    String
+  type                  PayrollItemType
+  description           String
+  amountMinor           Int
+  currency              String
+  createdAt             DateTime        @default(now())
+  payrollCycle          PayrollCycle    @relation(fields: [payrollCycleId], references: [id])
+  worker                Worker          @relation(fields: [workerId], references: [id])
+  employmentRecord      EmploymentRecord @relation(fields: [employmentRecordId], references: [id])
+
+  @@index([payrollCycleId])
+}
+
+model PayrollAdjustment {
+  id             String                  @id @default(cuid())
+  organizationId String
+  workerId       String
+  payrollCycleId String?
+  kind           PayrollAdjustmentKind
+  status         PayrollAdjustmentStatus @default(SUBMITTED)
+  description    String
+  amountMinor    Int
+  currency       String
+  decisionReason String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  organization   Organization            @relation(fields: [organizationId], references: [id])
+  worker         Worker                  @relation(fields: [workerId], references: [id])
+  payrollCycle   PayrollCycle?           @relation(fields: [payrollCycleId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([workerId, createdAt])
+  @@index([payrollCycleId])
+}
+
+model Invoice {
+  id              String            @id @default(cuid())
+  organizationId  String
+  payrollCycleId  String            @unique
+  invoiceNumber   String            @unique
+  status          InvoiceStatus     @default(DRAFT)
+  currency        String
+  subtotalMinor   Int
+  serviceFeeMinor Int
+  totalMinor      Int
+  issuedAt        DateTime?
+  dueAt           DateTime?
+  paidAt          DateTime?
+  pdfStorageKey   String?
+  pdfGeneratedAt  DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  payrollCycle    PayrollCycle      @relation(fields: [payrollCycleId], references: [id])
+  lineItems       InvoiceLineItem[]
+  payments        InvoicePayment[]
+}
+
+model InvoiceLineItem {
+  id             String  @id @default(cuid())
+  invoiceId      String
+  description    String
+  amountMinor    Int
+  currency       String
+  invoice        Invoice @relation(fields: [invoiceId], references: [id])
+}
+
+model InvoicePayment {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  amountMinor    Int
+  currency       String
+  reference      String
+  notes          String?
+  receivedAt     DateTime
+  createdAt      DateTime @default(now())
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId, receivedAt])
+}
+
+model TimeOffRequest {
+  id             String        @id @default(cuid())
+  organizationId String
+  workerId       String
+  type           TimeOffType
+  status         TimeOffStatus @default(REQUESTED)
+  startDate      DateTime
+  endDate        DateTime
+  days           Decimal
+  note           String?
+  decisionReason String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  worker         Worker        @relation(fields: [workerId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([workerId, startDate, endDate])
+}
+
+model TimeOffBalance {
+  id            String      @id @default(cuid())
+  workerId      String
+  year          Int
+  type          TimeOffType
+  allowanceDays Decimal
+  usedDays      Decimal     @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  worker        Worker      @relation(fields: [workerId], references: [id])
+
+  @@unique([workerId, year, type])
+}
+
+model Expense {
+  id                String          @id @default(cuid())
+  organizationId    String
+  workerId          String
+  payrollCycleId    String?
+  category          ExpenseCategory
+  status            ExpenseStatus   @default(SUBMITTED)
+  description       String
+  amountMinor       Int
+  currency          String
+  receiptStorageKey String?
+  decisionReason    String?
+  reviewedById      String?
+  reviewedAt        DateTime?
+  reimbursedAt      DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  worker            Worker          @relation(fields: [workerId], references: [id])
+  payrollCycle      PayrollCycle?   @relation(fields: [payrollCycleId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([workerId, createdAt])
+  @@index([payrollCycleId])
+}
+
+model Notification {
+  id             String             @id @default(cuid())
+  userId         String?
+  organizationId String?
+  type           String
+  subject        String
+  body           String
+  status         NotificationStatus @default(PENDING)
+  createdAt      DateTime           @default(now())
+  sentAt         DateTime?
+  user           User?              @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, status])
+}
+
+model NotificationPreference {
+  id           String   @id @default(cuid())
+  userId       String
+  type         String
+  emailEnabled Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, type])
+}
+
+model OutboxEvent {
+  id          String            @id @default(cuid())
+  type        String
+  status      OutboxEventStatus @default(PENDING)
+  payload     Json
+  attempts    Int               @default(0)
+  lastError   String?
+  processedAt DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@index([type])
+}
+
+model FeatureFlag {
+  id             String        @id @default(cuid())
+  organizationId String?
+  scopeKey       String        @default("global")
+  key            String
+  enabled        Boolean       @default(false)
+  description    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@unique([scopeKey, key])
+  @@index([key])
+}
+
+model BillingAccount {
+  id                    String       @id @default(cuid())
+  organizationId        String       @unique
+  billingContactName    String?
+  billingContactEmail   String?
+  taxId                 String?
+  paymentTermsDays      Int          @default(30)
+  invoiceCurrency       String       @default("USD")
+  purchaseOrderRequired Boolean      @default(false)
+  purchaseOrderNumber   String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id])
+}
+
+model ComplianceRule {
+  id             String                 @id @default(cuid())
+  organizationId String?
+  scopeKey       String                 @default("global")
+  countryCode    String
+  key            String
+  category       String
+  severity       ComplianceRuleSeverity @default(WARNING)
+  enabled        Boolean                @default(true)
+  config         Json
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  organization   Organization?          @relation(fields: [organizationId], references: [id])
+
+  @@unique([scopeKey, countryCode, key])
+  @@index([countryCode, enabled])
+}
+
+model DomainEvent {
+  id             String        @id @default(cuid())
+  organizationId String?
+  type           String
+  entityType     String
+  entityId       String
+  payload        Json
+  occurredAt     DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, occurredAt])
+  @@index([type])
+}
+
+model ImpersonationSession {
+  id             String    @id @default(cuid())
+  impersonatorId String
+  targetUserId   String
+  tokenId         String
+  reason         String
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  impersonator   User      @relation("ImpersonationActor", fields: [impersonatorId], references: [id])
+  targetUser     User      @relation("ImpersonationTarget", fields: [targetUserId], references: [id])
+
+  @@index([impersonatorId, startedAt])
+  @@index([targetUserId, startedAt])
+}
+
+model ApprovalWorkflow {
+  id             String         @id @default(cuid())
+  organizationId String
+  entityType     String
+  name           String
+  active         Boolean        @default(true)
+  requiredRoles  Json
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  steps          ApprovalStep[]
+
+  @@unique([organizationId, entityType, name])
+  @@index([organizationId, entityType, active])
+}
+
+model ApprovalStep {
+  id             String             @id @default(cuid())
+  workflowId     String
+  organizationId String
+  entityType     String
+  entityId       String
+  sequence       Int
+  requiredRole   OrganizationMemberRole
+  status         ApprovalStepStatus @default(PENDING)
+  decidedById    String?
+  decisionReason String?
+  decidedAt      DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  workflow       ApprovalWorkflow   @relation(fields: [workflowId], references: [id])
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  decidedBy      User?              @relation(fields: [decidedById], references: [id])
+
+  @@index([organizationId, entityType, entityId])
+  @@index([status])
+}
+
+model Task {
+  id             String        @id @default(cuid())
+  organizationId String?
+  assigneeId     String?
+  entityType     String?
+  entityId       String?
+  title          String
+  description    String?
+  status         TaskStatus    @default(OPEN)
+  priority       TaskPriority  @default(NORMAL)
+  dueAt          DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  assignee       User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([organizationId, status, dueAt])
+  @@index([assigneeId, status])
+}
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  actorId        String?
+  action         String
+  entityType     String
+  entityId       String
+  before         Json?
+  after          Json?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  actor          User?         @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([organizationId, entityType, entityId])
+  @@index([actorId])
+}
+
+model InternalNote {
+  id             String        @id @default(cuid())
+  organizationId String?
+  hireRequestId  String?
+  workerId       String?
+  authorId       String
+  body           String
+  createdAt      DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  hireRequest    HireRequest?  @relation(fields: [hireRequestId], references: [id])
+  worker         Worker?       @relation(fields: [workerId], references: [id])
+  author         User          @relation(fields: [authorId], references: [id])
+}

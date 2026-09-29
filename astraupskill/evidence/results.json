@@ -1,0 +1,31 @@
+{
+  "passed": true,
+  "executedTests": 3,
+  "checks": [
+    {
+      "project": "_Organized Desktop/03 Master Projects/master1",
+      "id": "39fabfbc58f5",
+      "command": [
+        "node",
+        "--experimental-vm-modules",
+        "--test",
+        "tests/tasks-service-completion.test.mjs"
+      ],
+      "cwd": "C:\\Users\\Owner\\Desktop\\AstraOrganized2\\astra-remaining-improvements\\stage\\39fabfbc58f5",
+      "environmentOverrides": {},
+      "startedAt": "2026-09-22T00:29:36.270291+00:00",
+      "status": "complete",
+      "log": "crud-b02-runtime2.log",
+      "pid": 8576,
+      "exitCode": 0,
+      "passed": true,
+      "finishedAt": "2026-09-22T00:29:44.264135+00:00",
+      "elapsedSeconds": 7.99
+    }
+  ],
+  "limits": [
+    "The regression invokes the real TasksService with explicit Prisma and audit doubles; it does not connect to a live database.",
+    "The local loader removes standalone Nest decorator syntax because Node's dependency-free TypeScript stripper cannot parse it; service method logic remains actual source.",
+    "This checks completion timestamp behavior only; concurrent task updates and database transaction behavior are outside scope."
+  ]
+}

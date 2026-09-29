@@ -1,0 +1,20 @@
+{
+  "name": "@globalwork/test-utils",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"Test utility package exposes helpers for integration suites\""
+  },
+  "dependencies": {
+    "@testcontainers/postgresql": "^11.7.0",
+    "testcontainers": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3"
+  }
+}

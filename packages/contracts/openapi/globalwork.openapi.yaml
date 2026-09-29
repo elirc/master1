@@ -1,0 +1,280 @@
+openapi: 3.1.0
+info:
+  title: GlobalWork EOR API
+  version: 0.1.0
+servers:
+  - url: http://localhost:4000/api
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    AuthUser:
+      type: object
+      properties:
+        userId: { type: string }
+        email: { type: string }
+        name: { type: string }
+        platformRole: { type: string, nullable: true }
+        memberships:
+          type: array
+          items:
+            type: object
+            properties:
+              organizationId: { type: string }
+              role: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        user:
+          $ref: "#/components/schemas/AuthUser"
+    Organization:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        legalName: { type: string }
+        status: { type: string }
+    CountryProfile:
+      type: object
+      additionalProperties: true
+      properties:
+        countryCode: { type: string }
+        countryName: { type: string }
+        defaultCurrency: { type: string }
+    HireRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        status: { type: string }
+        workerLegalName: { type: string }
+    Worker:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        legalName: { type: string }
+        status: { type: string }
+    PayrollCycle:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        status: { type: string }
+    Invoice:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        invoiceNumber: { type: string }
+        status: { type: string }
+    Notification:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        subject: { type: string }
+        status: { type: string }
+    TimeOffRequest:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        status: { type: string }
+        type: { type: string }
+    Expense:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        status: { type: string }
+        amountMinor: { type: integer }
+        currency: { type: string }
+paths:
+  /auth/login:
+    post:
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Authenticated user and token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+  /auth/me:
+    get:
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+  /organizations:
+    get:
+      responses:
+        "200":
+          description: Organizations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Organization"
+    post:
+      responses:
+        "200":
+          description: Created organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+  /countries:
+    get:
+      responses:
+        "200":
+          description: Countries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CountryProfile"
+  /hire-requests:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Hire requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HireRequest"
+    post:
+      responses:
+        "200":
+          description: Created hire request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HireRequest"
+  /workers:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Workers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Worker"
+  /payroll-cycles:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Payroll cycles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PayrollCycle"
+    post:
+      responses:
+        "200":
+          description: Created payroll cycle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollCycle"
+  /invoices:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Invoices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+  /notifications:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Notifications.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+  /time-off-requests:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Time off requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeOffRequest"
+  /expenses:
+    get:
+      parameters:
+        - name: organizationId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Expenses.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
