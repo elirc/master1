@@ -1,36 +1,63 @@
 # Locate the transition decision
 
-The [TasksController](../apps/api/src/modules/tasks/tasks.controller.ts) exposes
-list, create and update operations. Its update method obtains request context,
-reads the route identifier and forwards an UpdateTaskDto to TasksService.update.
-The controller is guarded by authentication and platform roles. These are
-platform task operations; do not assume that a missing organization filter
-is automatically a defect without understanding those roles and their scope.
+## Request path
 
-The [update DTO](../apps/api/src/modules/tasks/dto/update-task.dto.ts) describes
-optional status, priority, assignee and due-date inputs. Its supported status
-values include OPEN, IN_PROGRESS, BLOCKED, DONE and CANCELLED. The service
-receives a partial edit, so absence of status must not reset completion time.
-Read the DTO together with the service rather than treating the TypeScript
-optional marker as a complete description of runtime validation.
+`PATCH /api/tasks/:id` (global prefix set in `apps/api/src/main.ts:10`)
 
-TasksService.update first reads the existing task, constructs a Prisma update
-payload, performs the update, writes an audit record and returns the updated
-task. The existing record is already available for deciding whether DONE is
-a new transition. The patch therefore needs no new database query or schema
-field. It changes the completedAt decision inside the existing status branch.
+1. **Global pipe** — `main.ts:17-23` installs `ValidationPipe({ whitelist,
+   transform, forbidNonWhitelisted })`. Unknown body keys are rejected with
+   400 before the controller runs.
+2. **Guards** — [TasksController](../apps/api/src/modules/tasks/tasks.controller.ts)
+   lines 12-13 apply `AuthGuard` then `PlatformRoleGuard`, requiring one of
+   `PLATFORM_ADMIN`, `SUPPORT_AGENT`, `ONBOARDING_SPECIALIST`,
+   `PAYROLL_SPECIALIST`. These are platform-staff endpoints, so the absence of
+   an organization filter in `update` is by design, not automatically a
+   tenant leak. (How `AuthGuard` decides who you are is reviewed in 06.)
+3. **Controller** — `update` (lines 27-30) builds a `RequestContext` with
+   `contextFromRequest` and forwards `id` and the `UpdateTaskDto`.
+4. **DTO** — [update-task.dto.ts](../apps/api/src/modules/tasks/dto/update-task.dto.ts)
+   makes every field `@IsOptional()`. `status` must be one of `OPEN`,
+   `IN_PROGRESS`, `BLOCKED`, `DONE`, `CANCELLED` (line 5), matching the Prisma
+   `TaskStatus` enum (`packages/database/prisma/schema.prisma:189-195`).
+   Note that `@IsOptional()` skips validation for `null` as well as
+   `undefined`, so `{ "status": null }` reaches the service.
+5. **Service** — [TasksService.update](../apps/api/src/modules/tasks/tasks.service.ts),
+   lines 51-80:
 
-Audit logging records the before and after status and priority. It remains a
-separate awaited operation following persistence. The repair does not make
-the task write and audit write transactional, and it does not suppress audit
-events for repeat saves. Keep those facts separate from preservation of the
-completion timestamp.
+| Line | Step |
+| --- | --- |
+| 52 | `findUniqueOrThrow({ where: { id } })` → `before` |
+| 56-63 | status branch: writes `status` and the `completedAt` decision |
+| 64 | priority (truthiness check) |
+| 65 | `assigneeId` (presence check; `""` becomes `null`) |
+| 66 | `dueAt` (presence check; falsy becomes `null`) |
+| 70-77 | `audit.log("task.updated")` with before/after **status and priority only** |
+| 79 | returns the row Prisma returned from the update |
 
-The focused regression lives in [the service test](../tests/tasks-service-completion.test.mjs).
-It supplies the task read result, records update arguments and records audit
-calls. Its local loader removes standalone Nest decorator syntax before
-Node's TypeScript transformation; the method body being exercised is the
-actual service source. Draw the flow with four observations: prior status,
-requested status, generated completedAt field and returned task. That map
-makes the intended transition behavior inspectable without needing the entire
-platform running at once.
+The read at line 52 already provides `before.status` and `before.completedAt`,
+so the repair needed no new query or schema field: `Task.completedAt` is
+already a nullable `DateTime` (schema.prisma:807).
+
+The audit write at line 70 is a separate awaited call after the update, not
+inside `prisma.$transaction` (several other services, such as
+`expenses.service.ts:119`, do use transactions). If the audit insert fails, the
+task change has already been committed.
+
+## Test path
+
+The focused regression is [tests/tasks-service-completion.test.mjs](../tests/tasks-service-completion.test.mjs).
+It loads the service through [tests/helpers/load-typescript.mjs](../tests/helpers/load-typescript.mjs),
+which:
+
+- strips standalone decorator lines with a regex (line 40) because Node's
+  type stripper cannot parse legacy Nest decorators;
+- strips TypeScript types with `stripTypeScriptTypes` (line 41);
+- evaluates the module in a `vm` context, resolving `@nestjs/common`, the DTOs,
+  `PrismaService` and `AuditService` to stubs supplied by the test (test file
+  lines 27-33);
+- throws for any unstubbed external import (loader line 52), so a new
+  dependency cannot sneak in silently.
+
+The method body under test is the real source. To follow one case, record
+four observations: prior status, requested status, the generated
+`completedAt` field, and the returned task.

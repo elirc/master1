@@ -1,46 +1,52 @@
 # Evidence and limits of the completion-time fix
 
-The production change is confined to the task update service. Its original
-file is retained in [the original snapshot](snapshots/tasks.service.ts.original.txt)
-for direct comparison. The regression loads the
-service's method body, provides controlled prior records and inspects update
-and audit calls. Captured execution evidence is attached after the final
-reviewed run, with its command, exit status and actual test count.
+## What changed
 
-Run the focused suite from the project root using the local Node loader:
+One hunk in `apps/api/src/modules/tasks/tasks.service.ts` (lines 56-63). The
+pre-fix file is kept as [the original snapshot](snapshots/tasks.service.ts.original.txt);
+`diff` against the current file shows only that hunk (see
+[03](03-WORKED-CHANGE.md)).
+
+## How to re-run the evidence
+
+From the repo root, with Node 22.13 or newer (the loader calls
+`module.stripTypeScriptTypes`) and no install:
 
 ```text
 node --experimental-vm-modules --test tests/tasks-service-completion.test.mjs
 ```
 
-The loader transforms TypeScript with Node and removes standalone decorator
-syntax. It does not run Nest's dependency-injection or routing system. Explicit
-DTO, Prisma and audit substitutes make service decisions observable without
-installing all workspace packages. Those substitutions must remain visible
-when reporting the result; a passing service case is not a passing HTTP or
-database integration suite.
+Re-verified 2026-10-06 on Node 22.16.0: `# tests 3`, `# pass 3`, `# fail 0`.
+The six practice checks in [05](05-PRACTICE.md) were also run on that date
+against the current service and the snapshot: `# pass 6`, `# fail 0`.
 
-The intended evidence covers repeated DONE preserving the saved instant,
-entering DONE creating a completion value, reopening clearing it and omitted
-status leaving completion fields out of the payload. Review also checks that
-the existing persistence and audit sequence remains intact. The final captured
-test file and log establish which concrete variants executed; proposed
-exercises are not added to the passing-case total.
+## What the passing run covers
 
-No real database, generated Prisma client, class-validator pipeline or full
-platform build is claimed by this focused check. Concurrent read/write races,
-atomic task-and-audit persistence and legacy timestamp repair remain separate
-questions. The platform role guard is inspected for context but is not tested
-by these service doubles.
+- repeat DONE preserves the saved instant (same `Date` reference);
+- entering DONE writes the controlled clock instant;
+- reopening writes `null`;
+- a priority-only edit sends exactly `['priority']` and logs one audit row.
 
-Before extending this work, run a real application PATCH against a prepared
-database row with a known historical completion time and inspect the persisted
-value after a repeat save. Then coordinate competing writers if you intend
-to claim concurrency protection. Mechanical baseline, snapshot and link checks
-support delivery integrity, while source reasoning and executed behavior
-support the bounded fix. Keep those evidence types distinct in your own
-engineering report so that the next reviewer knows precisely what to trust.
+## What it does not cover
 
-## Astra execution evidence
+The loader deletes decorator lines and the test stubs DTOs, `PrismaService`
+and `AuditService`. So no claim is made about Nest routing, guards,
+class-validator, dependency injection, generated Prisma queries, a real
+database or a full build. Concurrent writers, atomic task-plus-audit
+persistence and legacy-row repair are open questions, and the unrelated
+findings in [06](06-SOLUTIONS-AND-REVIEW.md) (dev-header auth, 500 on unknown
+id) are untested.
 
-The captured focused production-source suite executed 3 tests: all passed, zero failed and zero skipped. Read the [captured output](evidence/crud-b02-runtime2.log) and [exact command and limits](evidence/results.json). Earlier check records remain preserved in the workspace.
+The stronger next experiment is a real `PATCH /api/tasks/:id` against a seeded
+DONE row with a known `completedAt`, followed by reading the row back; then
+two coordinated writers if you want to claim race protection. Keep the evidence
+types distinct in your own reports: source reading, focused execution, and
+integration behavior each prove different things.
+
+## Frozen Astra record
+
+[evidence/results.json](evidence/results.json) is the original 2026-09-22
+capture (3 tests, exit code 0, about 8 s). It is kept unedited as a historical
+record. Its `cwd` field is a path on the authoring machine, not a path you
+need, and the `crud-b02-runtime2.log` file it names was never committed to this
+repo; use the re-run above as the live evidence.

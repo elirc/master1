@@ -1,35 +1,51 @@
 # State equality is different from an event
 
-An enum value describes current state. A timestamp such as completedAt
-describes an event in the resource's history. Assigning status DONE does not
-necessarily mean a completion event just occurred: the task may already have
-been done when the user opened the form. This distinction matters whenever
-an edit screen submits all displayed fields, including values the user did
-not change.
+An enum value describes current state. A timestamp such as `completedAt`
+describes an event in the resource's history. Receiving `status: "DONE"` does
+not mean a completion event just happened: the task may already have been done
+when the user opened the form. This matters whenever an edit screen submits
+every displayed field, including ones the user did not change.
 
-Consider a task completed Monday morning. On Tuesday someone changes its
-priority and the form also sends DONE. The old service replaces Monday's
-completion time with Tuesday's save time. No task work was completed on
-Tuesday, yet reports using completedAt could now tell that story. The repaired
-branch looks at both the before state and requested state, preserving the
-existing value when both are DONE.
+## The bug in one story
 
-Entering DONE from another supported state is different. That is the point
-where this service should create a new completion timestamp. Leaving DONE
-clears the value under the existing product convention. Omitting status is
-different again: this partial request does not express a status operation,
-so it should not include status or completedAt in the update payload.
+A task is completed Monday morning. On Tuesday someone changes its priority
+and the form also sends `DONE`. The original service
+([snapshot](snapshots/tasks.service.ts.original.txt), line 56) replaced
+Monday's completion time with Tuesday's save time. No work was completed on
+Tuesday, yet any report built on `completedAt` (time-to-close, SLA breach)
+would now say so. The repaired branch compares the before state with the
+requested state and keeps the existing value when both are DONE.
 
-This behavior is a narrow form of repeat stability. Repeating DONE no longer
-changes completedAt. It does not make the entire request idempotent in every
-observable way: audit events still occur, and database-maintained edit times
-may change. Be precise about which state is stable rather than labeling the
-whole API idempotent from one assertion.
+## Four distinct cases
 
-There is also a data-quality question. If an already DONE row contains a null
-completion time, preserving it does not invent a historical timestamp. Repairing
-such rows would require a separate policy and evidence. Similarly, the current
-read-then-update sequence can race with another writer. A timestamp decision
-based on stale before state is a concurrency problem distinct from this
-sequential repeat-save defect. Naming those limits helps you propose focused
-follow-ups instead of expanding one small fix into an unreviewable rewrite.
+- **Entering DONE** from another status creates a completion timestamp.
+- **Repeating DONE** keeps the existing one.
+- **Leaving DONE** (any other supplied status) clears it to `null`, which is
+  the existing product convention.
+- **Omitting status** is not a status operation, so neither `status` nor
+  `completedAt` appears in the update payload. Absent and `null` are different
+  answers: `null` would actively erase history.
+
+## Stable field is not the same as idempotent request
+
+Repeating DONE no longer changes `completedAt`, but the request still has
+other effects every time: Prisma's `@updatedAt` bumps `Task.updatedAt`
+(schema.prisma:809) and a new `task.updated` audit row is inserted
+(tasks.service.ts:70-77). Say precisely which field is stable rather than
+calling the whole endpoint idempotent from one assertion.
+
+## Limits worth naming
+
+- **Legacy data.** A row that is DONE with `completedAt = null` keeps `null` on
+  a repeat save. Preserving it does not invent a history; repairing such rows
+  is a separate data decision.
+- **Concurrency.** The service reads (line 52) and then writes (line 53) with
+  no version check. A decision based on a stale `before` is a race, a
+  different defect from the sequential repeat-save bug.
+- **Audit coverage.** The audit row records only status and priority (lines
+  75-76), not `completedAt`, `assigneeId` or `dueAt`. You can reconstruct
+  *when* a task was moved to DONE from the audit row's `createdAt`, but not
+  what its `completedAt` was set to.
+
+Naming these limits lets you propose focused follow-ups instead of expanding
+one small fix into an unreviewable rewrite.
